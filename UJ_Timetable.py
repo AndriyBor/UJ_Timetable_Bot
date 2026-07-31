@@ -31,16 +31,16 @@ def generate_timetables(times, subjects, minim, maxim):
             name = subjects[ind_subject][3]
             for ind_unit in range(len(perm[ind_subject])):
                 form = times[name][ind_unit][-1]
-                k = perm[ind_subject][ind_unit]
-                for les in range(len(times[name][ind_unit][k])):
-                    num, start_time, end_time = times[name][ind_unit][k][les][0], times[name][ind_unit][k][les][1], \
-                    times[name][ind_unit][k][les][2]
-                    ind = binar(curr[num], start_time)
-                    if (ind == 0 or curr[num][ind - 1][3] == form == "Wykład" or minim <= start_time -
-                        curr[num][ind - 1][1]) and (
-                            ind == len(curr[num]) or curr[num][ind][3] == form == "Wykład" or minim <=
-                            curr[num][ind][0] - end_time):
-                        curr[num].insert(ind, [start_time, end_time, name, form])
+                group = perm[ind_subject][ind_unit]
+                for lesson in range(len(times[name][ind_unit][group])):
+                    day, start_time, end_time = times[name][ind_unit][group][lesson][0], times[name][ind_unit][group][lesson][1], \
+                    times[name][ind_unit][group][lesson][2]
+                    ind = binar(curr[day], start_time)
+                    if (ind == 0 or curr[day][ind - 1][3] == form == "Wykład" or minim <= start_time -
+                        curr[day][ind - 1][1]) and (
+                            ind == len(curr[day]) or curr[day][ind][3] == form == "Wykład" or minim <=
+                            curr[day][ind][0] - end_time):
+                        curr[day].insert(ind, [start_time, end_time, name, form])
                     else:
                         good = False
                         break
@@ -49,10 +49,10 @@ def generate_timetables(times, subjects, minim, maxim):
             if not good:
                 break
         if good:
-            for num in range(5):
-                for j in range(1, len(curr[num])):
-                    if curr[num][j][0] - curr[num][j - 1][1] > maxim and not (
-                            curr[num][j][3] == curr[num][j - 1][3] == "Wykład"):
+            for day in range(5):
+                for lesson in range(1, len(curr[day])):
+                    if curr[day][lesson][0] - curr[day][lesson - 1][1] > maxim and not (
+                            curr[day][lesson][3] == curr[day][lesson - 1][3] == "Wykład"):
                         good = False
                         break
                 if not good:
@@ -78,16 +78,16 @@ def generate_timetables(times, subjects, minim, maxim):
 def print_timetable(chosen):
     text = ""
     days = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek"]
-    for num in range(5):
-        text += days[num] + "\n"
-        if len(chosen[num]) == 0:
+    for day in range(5):
+        text += days[day] + "\n"
+        if not chosen[day]:
             text += "Nie ma zajęć!!!\n"
         else:
-            for i in range(len(chosen[num])):
-                start, end = chosen[num][i][0], chosen[num][i][1]
+            for lesson in range(len(chosen[day])):
+                start, end = chosen[day][lesson][0], chosen[day][lesson][1]
                 time1 = f"{start // 60:02d}:{start % 60:02d}"
                 time2 = f"{end // 60:02d}:{end % 60:02d}"
-                text += str(i + 1) + ". " + chosen[num][i][2] + " " + chosen[num][i][
+                text += str(lesson + 1) + ". " + chosen[day][lesson][2] + " " + chosen[day][lesson][
                     3] + " " + time1 + "-" + time2 + "\n"
         text += "\n"
     return text
@@ -140,7 +140,7 @@ async def collect(message: types.Message, state: FSMContext):
         await message.answer("What's the <b>minimum</b> break time you're OK with? Write in minutes.", parse_mode='HTML')
         await state.set_state(Form.ques)
     elif message.text == "/del":
-        if len(subjects) == 0:
+        if not subjects:
             await message.answer("There's no subject to delete.")
         else:
             subjects.pop()
@@ -163,28 +163,28 @@ async def collect(message: types.Message, state: FSMContext):
                 teachers = []
                 counts = []
                 buttons = InlineKeyboardBuilder()
-                for i in range(len(units)):
+                for ind_unit in range(len(units)):
                     teachers.append(dict())
                     counts.append(0)
                     response = await client.get(
                         "https://apps.usos.uj.edu.pl/services/groups/group?course_unit_id=" + units[
-                            i] + "&group_number=1&fields=class_type_id|lecturers")
+                            ind_unit] + "&group_number=1&fields=class_type_id|lecturers")
                     info = response.json()
-                    j = 1
+                    group = 1
                     while "message" not in info:
                         class_type = class_types[info["class_type_id"]]["name"]["pl"]
-                        for te in info["lecturers"]:
-                            prev_len = len(teachers[i])
-                            teachers[i][te["id"]] = [True, te["first_name"], te["last_name"], class_type]
-                            if len(teachers[i]) != prev_len:
+                        for teacher in info["lecturers"]:
+                            prev_len = len(teachers[ind_unit])
+                            teachers[ind_unit][teacher["id"]] = [True, teacher["first_name"], teacher["last_name"], class_type]
+                            if len(teachers[ind_unit]) != prev_len:
                                 counts[-1] += 1
                                 buttons.add(types.InlineKeyboardButton(
-                                    text="✅ " + te["first_name"] + " " + te["last_name"] + " (" + class_type + ")",
-                                    callback_data=str(i) + " " + te["id"]))
-                        j += 1
+                                    text="✅ " + teacher["first_name"] + " " + teacher["last_name"] + " (" + class_type + ")",
+                                    callback_data=str(ind_unit) + " " + teacher["id"]))
+                        group += 1
                         response = await client.get(
                             "https://apps.usos.uj.edu.pl/services/groups/group?course_unit_id=" + units[
-                                i] + "&group_number=" + str(j) + "&fields=class_type_id|lecturers")
+                                ind_unit] + "&group_number=" + str(group) + "&fields=class_type_id|lecturers")
                         info = response.json()
                 await state.update_data(subjects=subjects, teachers=teachers, counts=counts)
                 buttons.add(types.InlineKeyboardButton(text="Choice done", callback_data="/stop"))
@@ -226,14 +226,14 @@ async def choosing(call: types.CallbackQuery, state: FSMContext):
         await state.update_data(teachers=teachers, counts=counts)
         await call.answer()
         buttons = InlineKeyboardBuilder()
-        for i in range(len(teachers)):
-            for iden in teachers[i].keys():
+        for num in range(len(teachers)):
+            for iden in teachers[num].keys():
                 begin = "✅ "
-                if not (teachers[i][iden][0]):
+                if not (teachers[num][iden][0]):
                     begin = "❌ "
                 buttons.add(types.InlineKeyboardButton(
-                    text=begin + teachers[i][iden][1] + " " + teachers[i][iden][2] + " (" + teachers[i][iden][3] + ")",
-                    callback_data=str(i) + " " + iden))
+                    text=begin + teachers[num][iden][1] + " " + teachers[num][iden][2] + " (" + teachers[num][iden][3] + ")",
+                    callback_data=str(num) + " " + iden))
         buttons.add(types.InlineKeyboardButton(text="Choice done", callback_data="/stop"))
         buttons.adjust(1)
         await call.message.edit_reply_markup(reply_markup=buttons.as_markup())
@@ -268,50 +268,50 @@ async def make(message: types.Message, state: FSMContext):
         times = dict()
         try:
             async with httpx.AsyncClient() as client:
-                for i in range(len(subjects)):
-                    name = subjects[i][3]
-                    teachers = subjects[i][4]
+                for ind_subject in range(len(subjects)):
+                    name = subjects[ind_subject][3]
+                    teachers = subjects[ind_subject][4]
                     times[name] = []
-                    date = "20" + subjects[i][1][:2] + "-10-02"
-                    if subjects[i][1][-1] == 'L':
-                        date = "20" + subjects[i][1][3:5] + "-03-02"
-                    for j in range(len(subjects[i][2])):
-                        k = 1
-                        unit = subjects[i][2][j]
+                    date = "20" + subjects[ind_subject][1][:2] + "-10-02"
+                    if subjects[ind_subject][1][-1] == 'L':
+                        date = "20" + subjects[ind_subject][1][3:5] + "-03-02"
+                    for ind_unit in range(len(subjects[ind_subject][2])):
+                        group = 1
+                        unit = subjects[ind_subject][2][ind_unit]
                         times[name].append([])
                         response = await client.get(
                             "https://apps.usos.uj.edu.pl/services/tt/classgroup?unit_id=" + unit + "&group_number=" + str(
-                                k) + "&start=" + date + "&fields=start_time|end_time|name|lecturer_ids")
+                                group) + "&start=" + date + "&fields=start_time|end_time|name|lecturer_ids")
                         info = response.json()
                         if not info:
                             response = await client.get(
                                 "https://apps.usos.uj.edu.pl/services/tt/classgroup?unit_id=" + unit + "&group_number=" + str(
-                                    k) + "&start=" + date[:-1] + "9&fields=start_time|end_time|name|lecturer_ids")
+                                    group) + "&start=" + date[:-1] + "9&fields=start_time|end_time|name|lecturer_ids")
                             info = response.json()
                         while info:
                             good = True
                             for iden in info[0]["lecturer_ids"]:
-                                if not (teachers[j][str(iden)][0]):
+                                if not (teachers[ind_unit][str(iden)][0]):
                                     good = False
                                     break
                             if good:
-                                times[name][j].append([])
-                                for l in range(len(info)):
-                                    start, end = info[l]["start_time"], info[l]["end_time"]
+                                times[name][ind_unit].append([])
+                                for lesson in range(len(info)):
+                                    start, end = info[lesson]["start_time"], info[lesson]["end_time"]
                                     year, month, day = int(start[:4]), int(start[5:7]), int(start[8:10])
                                     num = datetime(year, month, day).weekday()
                                     start_time = int(start[11:13]) * 60 + int(start[14:16])
                                     end_time = int(end[11:13]) * 60 + int(end[14:16])
-                                    times[name][j][-1].append([num, start_time, end_time])
-                            k += 1
+                                    times[name][ind_unit][-1].append([num, start_time, end_time])
+                            group += 1
                             response = await client.get(
                                 "https://apps.usos.uj.edu.pl/services/tt/classgroup?unit_id=" + unit + "&group_number=" + str(
-                                    k) + "&start=" + date + "&fields=start_time|end_time|name|lecturer_ids")
+                                    group) + "&start=" + date + "&fields=start_time|end_time|name|lecturer_ids")
                             info = response.json()
                             if not info:
                                 response = await client.get(
                                     "https://apps.usos.uj.edu.pl/services/tt/classgroup?unit_id=" + unit + "&group_number=" + str(
-                                        k) + "&start=" + date[:-1] + "9&fields=start_time|end_time|name|lecturer_ids")
+                                        group) + "&start=" + date[:-1] + "9&fields=start_time|end_time|name|lecturer_ids")
                                 info = response.json()
                         response = await client.get(
                             "https://apps.usos.uj.edu.pl/services/tt/classgroup?unit_id=" + unit + "&group_number=1&start=" + date)
@@ -321,7 +321,7 @@ async def make(message: types.Message, state: FSMContext):
                                 "https://apps.usos.uj.edu.pl/services/tt/classgroup?unit_id=" + unit + "&group_number=1&start=" + date[
                                     :-1] + "9")
                             info = response.json()
-                        times[name][j].append(info[0]["name"]["pl"])
+                        times[name][ind_unit].append(info[0]["name"]["pl"])
         except Exception as err:
             print(err)
             await message.answer("Something went wrong during the communication with the USOS API server, please, try again later.")
@@ -335,21 +335,21 @@ async def make(message: types.Message, state: FSMContext):
         min_sum_breaks = []
         min_sum_days = []
         later_start = []
-        for i in range(len(timetables)):
+        for timetable in range(len(timetables)):
             sum_breaks = 0
             sum_days = 0
             start = 1440
             for day in range(5):
-                sum_days += (len(timetables[i][day]) != 0)
-                if len(timetables[i][day]) > 0 and timetables[i][day][0][-1] != "Wykład":
-                    start = min(start, timetables[i][day][0][0])
-                for j in range(1, len(timetables[i][day])):
-                    sum_breaks += timetables[i][day][j][0] - timetables[i][day][j - 1][1]
-                    if timetables[i][day][j][-1] != "Wykład":
-                        start = min(start, timetables[i][day][j][0])
-            min_sum_breaks.append([sum_breaks, timetables[i]])
-            min_sum_days.append([sum_days, timetables[i]])
-            later_start.append([start, timetables[i]])
+                sum_days += (len(timetables[timetable][day]) != 0)
+                if len(timetables[timetable][day]) > 0 and timetables[timetable][day][0][-1] != "Wykład":
+                    start = min(start, timetables[timetable][day][0][0])
+                for lesson in range(1, len(timetables[timetable][day])):
+                    sum_breaks += timetables[timetable][day][lesson][0] - timetables[timetable][day][lesson - 1][1]
+                    if timetables[timetable][day][lesson][-1] != "Wykład":
+                        start = min(start, timetables[timetable][day][lesson][0])
+            min_sum_breaks.append([sum_breaks, timetables[timetable]])
+            min_sum_days.append([sum_days, timetables[timetable]])
+            later_start.append([start, timetables[timetable]])
         min_sum_breaks.sort(reverse=True)
         min_sum_days.sort(reverse=True)
         later_start.sort()
@@ -377,7 +377,7 @@ async def trans(message: types.Message, state: FSMContext):
             "Thank you for using this bot, I hope it was useful!\nIf you want to create a new timetable, type /create",
             reply_markup=types.ReplyKeyboardRemove())
     elif message.text == "Minimum sum of break times":
-        if len(min_sum_breaks) == 0:
+        if not min_sum_breaks:
             await message.answer("Sorry, there's no timetable left.")
         else:
             await message.answer(print_timetable(min_sum_breaks[-1][1]))
@@ -385,7 +385,7 @@ async def trans(message: types.Message, state: FSMContext):
             await state.update_data(min_sum_breaks=min_sum_breaks)
         await state.set_state(Form.trans)
     elif message.text == "Minimum number of days":
-        if len(min_sum_days) == 0:
+        if not min_sum_days:
             await message.answer("Sorry, there's no timetable left.")
         else:
             await message.answer(print_timetable(min_sum_days[-1][1]))
@@ -393,7 +393,7 @@ async def trans(message: types.Message, state: FSMContext):
             await state.update_data(min_sum_days=min_sum_days)
         await state.set_state(Form.trans)
     elif message.text == "Later start each day (lectures excluded)":
-        if len(later_start) == 0:
+        if not later_start:
             await message.answer("Sorry, there's no timetable left.")
         else:
             await message.answer(print_timetable(later_start[-1][1]))
