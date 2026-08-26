@@ -9,6 +9,26 @@ from datetime import datetime
 import os
 from dotenv import load_dotenv
 
+class Subject:
+    def __init__(self, code, semester, units, name, teachers):
+        self.code = code
+        self.sem = semester
+        self.units = units
+        self.name = name
+        self.teachers = teachers
+
+class Teacher:
+    def __init__(self, allowed, first_name, last_name, class_type):
+        self.allowed = allowed
+        self.first_name = first_name
+        self.last_name = last_name
+        self.class_type = class_type
+
+class Time:
+    def __init__(self, day, start_time, end_time):
+        self.day = day
+        self.start_time = start_time
+        self.end_time = end_time
 
 def binar(arr, elem):
     left, right = -1, len(arr)
@@ -23,18 +43,18 @@ def binar(arr, elem):
 
 def generate_timetables(times, subjects, minim, maxim):
     ans = []
-    perm = [[0 for ind_unit in range(len(subjects[ind_subject][2]))] for ind_subject in range(len(subjects))]
+    perm = [[0 for ind_unit in range(len(subjects[ind_subject].units))] for ind_subject in range(len(subjects))]
     while True:
         curr = [[] for i in range(5)]
         good = True
         for ind_subject in range(len(perm)):
-            name = subjects[ind_subject][3]
+            name = subjects[ind_subject].name
             for ind_unit in range(len(perm[ind_subject])):
                 form = times[name][ind_unit][-1]
                 group = perm[ind_subject][ind_unit]
                 for lesson in range(len(times[name][ind_unit][group])):
-                    day, start_time, end_time = times[name][ind_unit][group][lesson][0], times[name][ind_unit][group][lesson][1], \
-                    times[name][ind_unit][group][lesson][2]
+                    time = times[name][ind_unit][group][lesson]
+                    day, start_time, end_time = time.day, time.start_time, time.end_time
                     ind = binar(curr[day], start_time)
                     if (ind == 0 or curr[day][ind - 1][3] == form == "Wykład" or minim <= start_time -
                         curr[day][ind - 1][1]) and (
@@ -61,7 +81,7 @@ def generate_timetables(times, subjects, minim, maxim):
                 ans.append(curr)
         next_done = False
         for ind_subject in range(len(perm)):
-            name = subjects[ind_subject][3]
+            name = subjects[ind_subject].name
             for ind_unit in range(len(perm[ind_subject])):
                 if perm[ind_subject][ind_unit] == len(times[name][ind_unit]) - 2:
                     perm[ind_subject][ind_unit] = 0
@@ -159,7 +179,7 @@ async def collect(message: types.Message, state: FSMContext):
                 response3 = await client.get(
                     "https://apps.usos.uj.edu.pl/services/courses/course?course_id=" + message.text)
                 name = response3.json()["name"]["pl"]
-                subjects.append([message.text, sem, units, name])
+                subjects.append(Subject(message.text, sem, units, name, []))
                 teachers = []
                 counts = []
                 buttons = InlineKeyboardBuilder()
@@ -175,7 +195,7 @@ async def collect(message: types.Message, state: FSMContext):
                         class_type = class_types[info["class_type_id"]]["name"]["pl"]
                         for teacher in info["lecturers"]:
                             prev_len = len(teachers[ind_unit])
-                            teachers[ind_unit][teacher["id"]] = [True, teacher["first_name"], teacher["last_name"], class_type]
+                            teachers[ind_unit][teacher["id"]] = Teacher(True, teacher["first_name"], teacher["last_name"], class_type)
                             if len(teachers[ind_unit]) != prev_len:
                                 counts[-1] += 1
                                 buttons.add(types.InlineKeyboardButton(
@@ -206,7 +226,7 @@ async def choosing(call: types.CallbackQuery, state: FSMContext):
         await call.answer()
         await call.message.edit_reply_markup(reply_markup=None)
         subjects, teachers = data.get("subjects", []), data.get("teachers", [])
-        subjects[-1].append(teachers)
+        subjects[-1].teachers = teachers
         await state.update_data(subjects=subjects)
         await call.message.answer("Accepted. Please, continue.")
         await state.set_state(Form.collect)
@@ -214,11 +234,11 @@ async def choosing(call: types.CallbackQuery, state: FSMContext):
         num, teacher_id = call.data.split()
         num = int(num)
         subjects, teachers, counts = data.get("subjects", []), data.get("teachers", []), data.get("counts", [])
-        if not (teachers[num][teacher_id][0]):
-            teachers[num][teacher_id][0] = True
+        if not teachers[num][teacher_id].allowed:
+            teachers[num][teacher_id].allowed = True
             counts[num] += 1
         elif counts[num] > 1:
-            teachers[num][teacher_id][0] = False
+            teachers[num][teacher_id].allowed = False
             counts[num] -= 1
         else:
             await call.answer("You can't delete all the teachers for a specific type of the lessons", show_alert=True)
@@ -229,10 +249,10 @@ async def choosing(call: types.CallbackQuery, state: FSMContext):
         for num in range(len(teachers)):
             for iden in teachers[num].keys():
                 begin = "✅ "
-                if not (teachers[num][iden][0]):
+                if not teachers[num][iden].allowed:
                     begin = "❌ "
                 buttons.add(types.InlineKeyboardButton(
-                    text=begin + teachers[num][iden][1] + " " + teachers[num][iden][2] + " (" + teachers[num][iden][3] + ")",
+                    text=begin + teachers[num][iden].first_name + " " + teachers[num][iden].last_name + " (" + teachers[num][iden].class_type + ")",
                     callback_data=str(num) + " " + iden))
         buttons.add(types.InlineKeyboardButton(text="Choice done", callback_data="/stop"))
         buttons.adjust(1)
@@ -262,22 +282,22 @@ async def make(message: types.Message, state: FSMContext):
         maxim = int(message.text)
         await message.answer("Your subjects:")
         for i in range(len(subjects)):
-            await message.answer(str(i + 1) + ". " + subjects[i][3] + " " + subjects[i][1])
+            await message.answer(str(i + 1) + ". " + subjects[i].name + " " + subjects[i].sem)
         await message.answer("Creating different timetables...")
 
         times = dict()
         try:
             async with httpx.AsyncClient() as client:
                 for ind_subject in range(len(subjects)):
-                    name = subjects[ind_subject][3]
-                    teachers = subjects[ind_subject][4]
+                    name = subjects[ind_subject].name
+                    teachers = subjects[ind_subject].teachers
                     times[name] = []
-                    date = "20" + subjects[ind_subject][1][:2] + "-10-02"
-                    if subjects[ind_subject][1][-1] == 'L':
-                        date = "20" + subjects[ind_subject][1][3:5] + "-03-02"
-                    for ind_unit in range(len(subjects[ind_subject][2])):
+                    date = "20" + subjects[ind_subject].sem[:2] + "-10-02"
+                    if subjects[ind_subject].sem[-1] == 'L':
+                        date = "20" + subjects[ind_subject].sem[3:5] + "-03-02"
+                    for ind_unit in range(len(subjects[ind_subject].units)):
                         group = 1
-                        unit = subjects[ind_subject][2][ind_unit]
+                        unit = subjects[ind_subject].units[ind_unit]
                         times[name].append([])
                         response = await client.get(
                             "https://apps.usos.uj.edu.pl/services/tt/classgroup?unit_id=" + unit + "&group_number=" + str(
@@ -291,7 +311,7 @@ async def make(message: types.Message, state: FSMContext):
                         while info:
                             good = True
                             for iden in info[0]["lecturer_ids"]:
-                                if not (teachers[ind_unit][str(iden)][0]):
+                                if not teachers[ind_unit][str(iden)].allowed:
                                     good = False
                                     break
                             if good:
@@ -302,7 +322,7 @@ async def make(message: types.Message, state: FSMContext):
                                     num = datetime(year, month, day).weekday()
                                     start_time = int(start[11:13]) * 60 + int(start[14:16])
                                     end_time = int(end[11:13]) * 60 + int(end[14:16])
-                                    times[name][ind_unit][-1].append([num, start_time, end_time])
+                                    times[name][ind_unit][-1].append(Time(num, start_time, end_time))
                             group += 1
                             response = await client.get(
                                 "https://apps.usos.uj.edu.pl/services/tt/classgroup?unit_id=" + unit + "&group_number=" + str(
