@@ -222,7 +222,18 @@ async def collect(message: types.Message, state: FSMContext):
 @dp.callback_query()
 async def choosing(call: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    if call.data == "/stop":
+    if call.data == "Yes":
+        await call.answer()
+        await call.message.edit_reply_markup(reply_markup=None)
+        await call.message.answer("What's the <b>minimum</b> break time you're OK with? Write in minutes.",
+                             parse_mode='HTML')
+        await state.set_state(Form.ques)
+    elif call.data == "No":
+        await call.answer()
+        await call.message.edit_reply_markup(reply_markup=None)
+        await call.message.answer(
+            "Thank you for using this bot, I hope it was useful!\nIf you want to create a new timetable, type /create")
+    elif call.data == "/stop":
         await call.answer()
         await call.message.edit_reply_markup(reply_markup=None)
         subjects, teachers = data.get("subjects", []), data.get("teachers", [])
@@ -348,8 +359,13 @@ async def make(message: types.Message, state: FSMContext):
 
         timetables = generate_timetables(times, subjects, minim, maxim)
         if not timetables:
+            buttons = InlineKeyboardBuilder()
+            buttons.add(types.InlineKeyboardButton(text="Yes", callback_data="Yes"))
+            buttons.add(types.InlineKeyboardButton(text="No", callback_data="No"))
+            buttons.adjust(1)
             await message.answer(
-                "Sorry, there's no timetable satisfied your criteria :(")
+                "Sorry, there's no timetable satisfied your criteria :(\nDo you want to change the break time range?",
+                reply_markup=buttons.as_markup())
             return
 
         min_sum_breaks = []
